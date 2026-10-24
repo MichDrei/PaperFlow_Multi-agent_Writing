@@ -1,0 +1,18 @@
+{
+  // 打开本项目时 VS Code 会提示安装这些扩展。
+  "recommendations": [
+    // ★ 必需：在 WSL2 里编辑本体文件系统（而不是通过 \\wsl.localhost 网络共享）。
+    //   装了它，扩展与文件监听才跑在 WSL 侧 —— Vite HMR 与 tsx watch 都依赖 Linux 的 inotify。
+    "ms-vscode-remote.remote-wsl",
+    // Tailwind v4 类名补全与悬浮预览（本项目样式全部是 Tailwind 原子类）
+    "bradlc.vscode-tailwindcss",
+    // 读取 .editorconfig 的缩进 / 行尾设置
+    "editorconfig.editorconfig",
+    // 把类型错误直接显示在代码行尾，省得盯着终端
+    "usernamehw.errorlens"
+  ],
+  // 说明：如果你已经装了 LaTeX Workshop —— 本项目**没有**磁盘上的 .tex 文件
+  //（演示论文是 packages/context/src/demoProject.ts 里的 TS 字符串），因此它不会被触发。
+  // 等 P3 接入真实 .tex 项目时再配置它（届时建议把 TeX 也装在 WSL 侧，而不是 Windows 侧）。
+  "unwantedRecommendations": []
+}

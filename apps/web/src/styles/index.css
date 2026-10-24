@@ -1,0 +1,349 @@
+@import 'katex/dist/katex.min.css';
+
+@import 'tailwindcss';
+
+@theme {
+  --color-ink-950: #0a0d13;
+  --color-ink-925: #0e121a;
+  --color-ink-900: #121722;
+  --color-ink-850: #171d29;
+  --color-ink-800: #1d2432;
+  --color-ink-750: #232c3c;
+  --color-ink-700: #2c3648;
+  --color-ink-600: #3d4a60;
+  --color-ink-500: #55637c;
+  --color-ink-400: #74829a;
+  --color-ink-300: #9aa7bd;
+  --color-ink-200: #c3cddd;
+  --color-ink-100: #e8edf5;
+
+  --color-brand-500: #4f8cff;
+  --color-brand-400: #6ea2ff;
+  --color-brand-600: #3574e8;
+
+  --color-accent-teal: #2dd4bf;
+  --color-accent-amber: #f5b544;
+  --color-accent-rose: #f4636c;
+  --color-accent-violet: #a78bfa;
+
+  --font-sans: 'Inter', 'Segoe UI', system-ui, -apple-system, 'PingFang SC', 'Microsoft YaHei', sans-serif;
+  --font-mono: 'JetBrains Mono', 'SF Mono', Menlo, Consolas, 'Liberation Mono', monospace;
+}
+
+html,
+body,
+#root {
+  height: 100%;
+  margin: 0;
+}
+
+body {
+  background: var(--color-ink-950);
+  color: var(--color-ink-100);
+  font-family: var(--font-sans);
+  overflow: hidden;
+  -webkit-font-smoothing: antialiased;
+}
+
+/* ---------- 滚动条 ---------- */
+* {
+  scrollbar-width: thin;
+  scrollbar-color: var(--color-ink-700) transparent;
+}
+*::-webkit-scrollbar {
+  width: 9px;
+  height: 9px;
+}
+*::-webkit-scrollbar-track {
+  background: transparent;
+}
+*::-webkit-scrollbar-thumb {
+  background: var(--color-ink-700);
+  border-radius: 999px;
+  border: 2px solid transparent;
+  background-clip: content-box;
+}
+*::-webkit-scrollbar-thumb:hover {
+  background: var(--color-ink-600);
+  background-clip: content-box;
+}
+
+/* ---------- 拖拽分隔条 ---------- */
+[data-panel-resize-handle-id] {
+  position: relative;
+  transition: background-color 120ms ease;
+}
+[data-panel-resize-handle-id]:hover,
+[data-panel-resize-handle-id][data-resize-handle-state='drag'] {
+  background-color: var(--color-brand-500);
+}
+
+/* ---------- 流式输出光标 ---------- */
+@keyframes pf-blink {
+  0%,
+  100% {
+    opacity: 1;
+  }
+  50% {
+    opacity: 0.15;
+  }
+}
+.pf-caret::after {
+  content: '▍';
+  margin-left: 1px;
+  animation: pf-blink 1s steps(2, start) infinite;
+  color: var(--color-brand-400);
+}
+
+@keyframes pf-fade-up {
+  from {
+    opacity: 0;
+    transform: translateY(4px);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+.pf-enter {
+  animation: pf-fade-up 180ms ease-out;
+}
+
+@keyframes pf-pulse-ring {
+  0% {
+    box-shadow: 0 0 0 0 rgba(79, 140, 255, 0.5);
+  }
+  100% {
+    box-shadow: 0 0 0 8px rgba(79, 140, 255, 0);
+  }
+}
+.pf-pulse {
+  animation: pf-pulse-ring 1.6s ease-out infinite;
+}
+
+/* ---------- 消息正文排版 ---------- */
+.pf-prose {
+  font-size: 13px;
+  line-height: 1.68;
+  word-break: break-word;
+}
+.pf-prose p {
+  margin: 0 0 8px;
+}
+.pf-prose p:last-child {
+  margin-bottom: 0;
+}
+.pf-prose code {
+  font-family: var(--font-mono);
+  font-size: 11.5px;
+  background: var(--color-ink-800);
+  border: 1px solid var(--color-ink-700);
+  border-radius: 4px;
+  padding: 0 4px;
+}
+.pf-prose pre {
+  font-family: var(--font-mono);
+  font-size: 11.5px;
+  background: var(--color-ink-925);
+  border: 1px solid var(--color-ink-750);
+  border-radius: 8px;
+  padding: 10px 12px;
+  margin: 8px 0;
+  overflow-x: auto;
+  white-space: pre;
+}
+.pf-prose pre code {
+  background: none;
+  border: none;
+  padding: 0;
+}
+.pf-prose strong {
+  color: var(--color-ink-100);
+  font-weight: 600;
+}
+.pf-prose ul {
+  margin: 6px 0 8px;
+  padding-left: 18px;
+  list-style: disc;
+}
+.pf-prose li {
+  margin: 2px 0;
+}
+
+/* ---------- Monaco 选区工具栏避让 ---------- */
+.monaco-editor .pf-selection-decoration {
+  background: rgba(79, 140, 255, 0.12);
+  border-bottom: 1px dashed rgba(79, 140, 255, 0.5);
+}
+
+/* ─────────────────────────────────────────────────────────────
+   pdf.js 文本层（用于在 PDF 里选中文字、双击跳回源码）
+   取自 pdfjs-dist/web/pdf_viewer.css 的 .textLayer 规则，只保留必需部分。
+   关键点：span 的 color 必须是 transparent——真正看到的是下层 canvas 的字形，
+   文本层只负责"可选中"；少了这些规则会导致文字错位或整层不可选。
+   ───────────────────────────────────────────────────────────── */
+.pf-text-layer {
+  position: absolute;
+  text-align: initial;
+  inset: 0;
+  overflow: clip;
+  line-height: 1;
+  -webkit-text-size-adjust: none;
+  text-size-adjust: none;
+  forced-color-adjust: none;
+  transform-origin: 0 0;
+  caret-color: CanvasText;
+  z-index: 1;
+}
+
+.pf-text-layer :is(span, br) {
+  color: transparent;
+  position: absolute;
+  white-space: pre;
+  cursor: text;
+  transform-origin: 0% 0%;
+}
+
+.pf-text-layer > :not(.markedContent) {
+  z-index: 1;
+}
+
+/* 选中高亮：canvas 在下、文本层在上，所以要给透明文字一层可见的选区底色 */
+.pf-text-layer ::selection {
+  background: rgb(79 140 255 / 0.38);
+}
+
+/* 双击定位后短暂高亮命中的词句 */
+.pf-text-layer .pf-text-hit {
+  background: rgb(79 140 255 / 0.28);
+  border-radius: 2px;
+}
+
+/* 单词级定位的强调样式（配合整行淡底：整行说明位置、词上再叠一层让它跳出来） */
+.pf-word-decoration {
+  background: rgb(79 140 255 / 0.28);
+  border-radius: 2px;
+  box-shadow: 0 0 0 1px rgb(79 140 255 / 0.5);
+}
+
+/* 悬浮预览里的公式：深色背景下 KaTeX 默认继承文字色即可，只需给点上下留白 */
+.pf-katex-hover {
+  padding: 2px 0;
+}
+.pf-katex-hover .katex-display {
+  margin: 0.2em 0;
+}
+
+/* 悬浮预览里的表格（由 tabular 解析而来） */
+.pf-table {
+  border-collapse: collapse;
+  font-size: 10.5px;
+  line-height: 1.35;
+}
+.pf-table th,
+.pf-table td {
+  padding: 2px 7px;
+  text-align: left;
+  white-space: nowrap;
+}
+.pf-table th {
+  font-weight: 600;
+  color: var(--color-ink-100, #e7ecf3);
+}
+.pf-table tr.pf-tbl-top td,
+.pf-table tr.pf-tbl-bottom td {
+  border-top: 1.5px solid rgb(148 163 184 / 0.55);
+  padding: 0;
+  height: 0;
+}
+.pf-table tr.pf-tbl-bottom td {
+  border-top: none;
+  border-bottom: 1.5px solid rgb(148 163 184 / 0.55);
+}
+.pf-table tr.pf-tbl-mid td {
+  border-top: 1px solid rgb(148 163 184 / 0.35);
+  padding: 0;
+  height: 0;
+}
+
+/* 批注高亮的正文区间 */
+.pf-annotation-range {
+  background: rgba(245, 158, 11, 0.16);
+  border-bottom: 1px dashed rgba(245, 158, 11, 0.55);
+}
+
+
+/*
+ * 白天模式。
+ *
+ * 全部颜色都来自 @theme 的 `--color-*` token，所以只要在 `html.light` 下
+ * 覆盖这些变量，整站就会跟着变——不需要逐个组件改 class。
+ */
+html.light {
+  /* 主色在浅色下要更深：primary 按钮是白字，浅蓝底会看不见 */
+  --color-brand-400: #3b82f6;
+  --color-brand-500: #2563eb;
+  --color-brand-600: #1d4ed8;
+  --color-ink-950: #f6f7f9;
+  --color-ink-925: #eef1f5;
+  --color-ink-900: #ffffff;
+  --color-ink-850: #f3f5f8;
+  --color-ink-800: #e9edf3;
+  --color-ink-750: #dfe5ee;
+  --color-ink-700: #cfd7e3;
+  --color-ink-600: #aab4c4;
+  --color-ink-500: #7b8798;
+  --color-ink-400: #5c6879;
+  --color-ink-300: #47525f;
+  --color-ink-200: #2f3843;
+  --color-ink-100: #1b222c;
+}
+
+/*
+ * 注意：这里**不要**用 !important 改 Monaco 背景。
+ * Monaco 的背景由它自己的主题控制（见 LatexEditor 里的 paperflow-light），
+ * 早期这里写了 `background-color: #fff !important`，
+ * 结果把羊皮纸主题整个覆盖掉——切到白天模式后编辑器仍是纯白。
+ */
+
+
+/* 浅色模式的一些针对性修正：这些地方原来是按深色写死的 */
+html.light .pf-annotation-range {
+  background: rgba(200, 150, 20, 0.22);
+  border-bottom-color: rgba(160, 110, 10, 0.6);
+}
+html.light .pf-prose code {
+  background: rgba(140, 74, 31, 0.1);
+  color: #8c4a1f;
+}
+/* Monaco 的滚动条/边框在浅色下别太黑 */
+html.light .monaco-editor .scrollbar .slider {
+  background: rgba(120, 100, 70, 0.25) !important;
+}
+
+
+/* 浅色模式下批注卡片与未读徽标的对比度 */
+html.light .pf-annotation-card {
+  background: #fffdf6;
+  border-color: #e0d6bd;
+  color: #2b2519;
+}
+
+
+/*
+ * 浅色模式下的禁用控件。
+ *
+ * 有些按钮用的是渐变背景（background-image），禁用时又整体降到 45% 透明度，
+ * 在浅色底上就变成"白字 + 淡底"完全看不见（编译/发送都中招）。
+ * 这里统一：禁用时去掉渐变、给灰底灰字。
+ */
+html.light button:disabled {
+  opacity: 0.9 !important;
+}
+html.light button:disabled[class*='bg-gradient'],
+html.light button:disabled[class*='bg-brand'] {
+  background-image: none !important;
+  background-color: #e9edf3 !important;
+  color: #5c6879 !important;
+  border-color: #cfd7e3 !important;
+}

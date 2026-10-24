@@ -1,0 +1,43 @@
+node_modules/
+dist/
+build/
+.next/
+out/
+coverage/
+
+# local env & secrets
+.env
+.env.local
+.env.*.local
+
+# package manager / tooling caches (kept inside the workspace)
+.npm-cache/
+.cache/
+*.log
+
+# 运行时数据（共享知识落盘等）
+.paperflow/
+
+# headless-browser sandbox for scripts/verify-ui.sh
+.playwright/
+artifacts/
+
+# build artifacts
+apps/web/public/pdfjs/
+apps/web/public/__tmp/
+apps/web/public/generated/
+services/latex-compiler/build/
+
+# editor / OS
+# 保留 .vscode 下这两个"团队共用"的文件（推荐扩展 + 统一行尾/TS 版本），其余忽略
+.vscode/*
+!.vscode/extensions.json
+!.vscode/settings.json
+.DS_Store
+.idea/
+
+# TeX 引擎与缓存（含 Windows 字体，不能随仓库分发：微软字体 EULA 不允许再分发）
+.tectonic/
+# 编译产物缓存
+.paperflow/pdf-cache/
+.release/

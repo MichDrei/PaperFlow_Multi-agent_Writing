@@ -1,0 +1,60 @@
+{
+  // ---- 行尾与编码：与 .gitattributes / .editorconfig 保持一致 ----
+  // 即使在 Windows 侧打开，也不要把项目文件写成 CRLF：
+  // 解析管线里的若干正则以行尾锚定，CRLF 会让它们静默失效。
+  "files.eol": "\n",
+  "files.encoding": "utf8",
+  "files.trimTrailingWhitespace": true,
+  "files.insertFinalNewline": true,
+
+  // ---- TypeScript：使用仓库内安装的版本，而不是 VS Code 自带的 ----
+  // 这样 VS Code 的诊断结果与 `npm run typecheck` 完全一致。
+  "typescript.tsdk": "node_modules/typescript/lib",
+  "typescript.enablePromptUseWorkspaceTsdk": true,
+  "typescript.preferences.importModuleSpecifier": "non-relative",
+
+  // ---- 编辑器体验 ----
+  "editor.formatOnSave": false,
+  "editor.codeActionsOnSave": {
+    "source.organizeImports": "never"
+  },
+  "editor.rulers": [100],
+  "editor.tabSize": 2,
+  "editor.detectIndentation": false,
+
+  // ---- Tailwind v4：让智能提示认识 @theme 里自定义的颜色 token ----
+  "tailwindCSS.experimental.classRegex": [["cn\\(([^)]*)\\)", "[\"'`]([^\"'`]*)[\"'`]"]],
+  "tailwindCSS.classAttributes": ["class", "className", "bodyClassName"],
+
+  // ---- 文件浏览：把生成物和缓存折叠掉 ----
+  "files.exclude": {
+    "**/.npm-cache": true,
+    "**/.cache": true,
+    "**/.playwright": true,
+    "**/node_modules": true
+  },
+  "search.exclude": {
+    "**/node_modules": true,
+    "**/dist": true,
+    "**/artifacts": true,
+    "**/.npm-cache": true,
+    "**/package-lock.json": true
+  },
+  "files.watcherExclude": {
+    "**/node_modules/**": true,
+    "**/.npm-cache/**": true,
+    "**/.playwright/**": true,
+    "**/dist/**": true,
+    "**/artifacts/**": true
+  },
+
+  // ---- 按文件类型给点语法糖 ----
+  "files.associations": {
+    "*.example": "dotenv"
+  },
+  "[typescript]": { "editor.defaultFormatter": null },
+  "[typescriptreact]": { "editor.defaultFormatter": null },
+
+  // 终端默认用登录 shell，避免 WSL 里 PATH 与 nvm 未加载
+  "terminal.integrated.defaultProfile.linux": "bash"
+}

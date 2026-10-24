@@ -1,0 +1,46 @@
+# 行尾与编码的强制统一。
+#
+# 为什么对这个项目尤其重要：
+# 1. 后端与解析管线大量用 `$` 锚定行尾的正则（例如剥离 LaTeX 注释的 /% .*$/）——
+#    JS 里不带 m 标志的 `$` 只匹配输入末尾，CRLF 会让这类正则静默失效；
+# 2. diff 引擎按行比较，CRLF 混入会产生"整篇重写"的假 diff；
+# 3. 项目主要在 WSL2 里跑，而源码可能被 Windows 侧编辑器写入。
+# 统一为 LF 后，无论在哪一侧编辑都不会出问题（tests/eol.test.ts 亦做了运行时兜底）。
+
+* text=auto eol=lf
+
+# 明确按文本处理
+*.ts    text eol=lf
+*.tsx   text eol=lf
+*.js    text eol=lf
+*.mjs   text eol=lf
+*.mts   text eol=lf
+*.json  text eol=lf
+*.css   text eol=lf
+*.html  text eol=lf
+*.md    text eol=lf
+*.yml   text eol=lf
+*.sh    text eol=lf
+*.tex   text eol=lf
+*.bib   text eol=lf
+*.example text eol=lf
+
+# Windows 侧脚本：保留 CRLF，否则 .bat/.cmd/.ps1 可能无法执行
+*.bat   text eol=crlf
+*.cmd   text eol=crlf
+*.ps1   text eol=crlf
+
+# 二进制：禁止任何行尾转换与 diff
+*.png   binary
+*.jpg   binary
+*.jpeg  binary
+*.gif   binary
+*.ico   binary
+*.pdf   binary
+*.woff  binary
+*.woff2 binary
+*.ttf   binary
+*.ttc   binary
+
+# 依赖锁文件不要参与 diff 噪声统计
+package-lock.json -diff linguist-generated

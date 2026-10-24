@@ -1,0 +1,16 @@
+{
+  "extends": "../../tsconfig.base.json",
+  "compilerOptions": {
+    "noEmit": true,
+    "jsx": "react-jsx",
+    "types": ["vite/client"],
+    "baseUrl": ".",
+    "paths": {
+      "@paperflow/core": ["../../packages/core/src/index.ts"],
+      "@paperflow/context": ["../../packages/context/src/index.ts"],
+      "@paperflow/latex": ["../../packages/latex/src/index.ts"],
+      "@/*": ["./src/*"]
+    }
+  },
+  "include": ["src", "vite.config.ts"]
+}

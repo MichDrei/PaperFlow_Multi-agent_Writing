@@ -1,0 +1,17 @@
+{
+  "extends": "../../tsconfig.base.json",
+  "compilerOptions": {
+    "noEmit": true,
+    "types": ["node"],
+    "baseUrl": ".",
+    "paths": {
+      "@paperflow/core": ["../../packages/core/src/index.ts"],
+      "@paperflow/context": ["../../packages/context/src/index.ts"],
+      "@paperflow/latex": ["../../packages/latex/src/index.ts"],
+      "@paperflow/latex/tectonic": ["../../packages/latex/src/tectonicCompiler.ts"],
+      "@paperflow/llm": ["../../packages/llm/src/index.ts"],
+      "@paperflow/agents": ["../../packages/agents/src/index.ts"]
+    }
+  },
+  "include": ["src"]
+}

@@ -1,0 +1,60 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+jobs:
+  verify:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+
+      - run: npm ci
+
+      # 全量类型检查：后端包 + 前端（各自 tsconfig）
+      - run: npm run typecheck
+
+      # 纯算法单测：diff 引擎、@提及路由、BibTeX、术语、提议解析、编译器
+      - run: npm test
+
+      - run: npm run build
+
+  ui-smoke:
+    runs-on: ubuntu-latest
+    needs: verify
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+
+      - run: npm ci
+
+      - run: npx playwright install --with-deps chromium
+
+      # 启动前端（浏览器内 Mock 模式）后跑真实浏览器冒烟测试
+      - name: Start web dev server
+        run: |
+          npm run dev:web &
+          npx wait-on http://127.0.0.1:5273 --timeout 60000
+
+      - name: Run UI smoke test
+        env:
+          VERIFY_TAG: ci
+        run: bash scripts/verify-ui.sh http://127.0.0.1:5273
+
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: ui-screenshots
+          path: artifacts/
+          retention-days: 7

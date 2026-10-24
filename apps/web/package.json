@@ -1,0 +1,43 @@
+{
+  "name": "@paperflow/web",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev": "vite --port 5273 --strictPort",
+    "build": "vite build",
+    "preview": "vite preview --port 5273",
+    "typecheck": "tsc -p tsconfig.json --noEmit",
+    "predev": "node ../../scripts/setup-pdfjs-assets.mjs",
+    "prebuild": "node ../../scripts/setup-pdfjs-assets.mjs"
+  },
+  "dependencies": {
+    "@monaco-editor/react": "^4.6.0",
+    "@paperflow/context": "*",
+    "@paperflow/core": "*",
+    "@paperflow/latex": "*",
+    "@paperflow/ui": "*",
+    "cookie": "^2.0.1",
+    "katex": "^0.18.7",
+    "lucide-react": "^0.469.0",
+    "monaco-editor": "^0.52.2",
+    "pdfjs-dist": "^4.8.69",
+    "react": "^18.3.1",
+    "react-dom": "^18.3.1",
+    "react-resizable-panels": "^2.1.7",
+    "ws": "^8.22.0",
+    "y-monaco": "^0.1.6",
+    "y-websocket": "^3.1.0",
+    "yjs": "^13.6.33",
+    "zustand": "^5.0.2"
+  },
+  "devDependencies": {
+    "@tailwindcss/vite": "^4.0.0",
+    "@types/react": "^18.3.18",
+    "@types/react-dom": "^18.3.5",
+    "@vitejs/plugin-react": "^4.3.4",
+    "tailwindcss": "^4.0.0",
+    "typescript": "^5.7.3",
+    "vite": "^6.0.7"
+  }
+}

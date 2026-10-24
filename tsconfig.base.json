@@ -1,0 +1,36 @@
+{
+  "$schema": "https://json.schemastore.org/tsconfig",
+  "compilerOptions": {
+    "target": "ES2022",
+    "lib": ["ES2022", "DOM", "DOM.Iterable"],
+    "module": "ESNext",
+    "moduleResolution": "Bundler",
+    "strict": true,
+    "noUncheckedIndexedAccess": true,
+    "noImplicitOverride": true,
+    "esModuleInterop": true,
+    "skipLibCheck": true,
+    "forceConsistentCasingInFileNames": true,
+    "resolveJsonModule": true,
+    "isolatedModules": true,
+    "verbatimModuleSyntax": true,
+    "declaration": true,
+    "sourceMap": true,
+    "baseUrl": ".",
+    "paths": {
+      "@paperflow/core": ["packages/core/src/index.ts"],
+      "@paperflow/core/*": ["packages/core/src/*"],
+      "@paperflow/llm": ["packages/llm/src/index.ts"],
+      "@paperflow/llm/*": ["packages/llm/src/*"],
+      "@paperflow/agents": ["packages/agents/src/index.ts"],
+      "@paperflow/agents/*": ["packages/agents/src/*"],
+      "@paperflow/context": ["packages/context/src/index.ts"],
+      "@paperflow/context/*": ["packages/context/src/*"],
+      "@paperflow/latex": ["packages/latex/src/index.ts"],
+      "@paperflow/latex/*": ["packages/latex/src/*"],
+      "@paperflow/latex/tectonic": ["packages/latex/src/tectonicCompiler.ts"],
+      "@paperflow/ui": ["packages/ui/src/index.ts"],
+      "@paperflow/ui/*": ["packages/ui/src/*"]
+    }
+  }
+}

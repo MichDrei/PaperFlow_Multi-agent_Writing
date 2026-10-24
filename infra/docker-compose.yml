@@ -1,0 +1,58 @@
+# PaperFlow 本地开发编排
+#
+# 用法：
+#   docker compose -f infra/docker-compose.yml up --build
+#
+# 说明：
+# - web / server 使用宿主机源码挂载 + 匿名卷保护 node_modules，避免容器内覆盖本地依赖。
+# - latex-compiler 是 P3 的可选服务：默认不启动（profiles: [latex]），
+#   需要时用 `--profile latex` 打开，并给 server 传 LATEX_COMPILER_URL。
+# - 生产部署请把 command 换成构建产物（web: vite build 后由静态服务器托管；
+#   server: node 直接跑编译后的 JS）。
+
+services:
+  server:
+    image: node:22-slim
+    working_dir: /app
+    command: npm run dev -w @paperflow/server
+    environment:
+      PORT: 8787
+      HOST: 0.0.0.0
+      CORS_ORIGINS: http://127.0.0.1:5273,http://localhost:5273
+      MAX_CONCURRENCY: 4
+      ENABLE_CROSS_REVIEW: 'true'
+      # 从宿主机 .env 注入密钥（不要写进镜像）
+      ANTHROPIC_API_KEY: ${ANTHROPIC_API_KEY:-}
+      OPENAI_API_KEY: ${OPENAI_API_KEY:-}
+      GOOGLE_API_KEY: ${GOOGLE_API_KEY:-}
+      DEEPSEEK_API_KEY: ${DEEPSEEK_API_KEY:-}
+      MOONSHOT_API_KEY: ${MOONSHOT_API_KEY:-}
+      QWEN_API_KEY: ${QWEN_API_KEY:-}
+      OPENROUTER_API_KEY: ${OPENROUTER_API_KEY:-}
+    ports:
+      - '8787:8787'
+    volumes:
+      - ..:/app
+      - /app/node_modules
+
+  web:
+    image: node:22-slim
+    working_dir: /app
+    command: npm run dev:web
+    environment:
+      VITE_API_BASE: http://127.0.0.1:8787
+    ports:
+      - '5273:5273'
+    volumes:
+      - ..:/app
+      - /app/node_modules
+    depends_on:
+      - server
+
+  latex-compiler:
+    # P3 尚未实现；此处预留服务定义，接口契约见 services/latex-compiler/README.md
+    build:
+      context: ../services/latex-compiler
+    profiles: ['latex']
+    ports:
+      - '8788:8788'
