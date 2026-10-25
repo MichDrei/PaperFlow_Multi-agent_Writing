@@ -25,7 +25,7 @@ import { API_BASE, apiUrl, getBackendMode } from '@/lib/backend';
 import { useChatStore } from './chatStore';
 import { HttpCompiler, MockCompiler, type LatexCompiler, type SourceAnchor } from '@paperflow/latex';
 
-export type LeftRailView = 'files' | 'outline' | 'annotations' | 'context' | 'models';
+export type LeftRailView = 'files' | 'outline' | 'notes' | 'annotations' | 'context' | 'models';
 
 /** 左侧工作区呈现方式：仅编辑器 / 仅 PDF / 上下分栏。 */
 /**

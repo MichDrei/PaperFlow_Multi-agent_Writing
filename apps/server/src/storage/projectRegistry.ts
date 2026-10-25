@@ -29,6 +29,11 @@ export interface ProjectMeta {
   updatedAt: string;
   /** 是否已进入协作（有人被批准加入后置 true）。 */
   collab?: boolean;
+  /** 创建者（用户 id）。老项目没有这个字段。 */
+  ownerId?: string;
+  /** 参与该项目的成员 id（被批准加入时写入）。 */
+  members?: string[];
+
 }
 
 /** 把任意名字转成可安全用作目录名的 id。 */
@@ -138,6 +143,35 @@ export class ProjectRegistry {
    * 启动时把磁盘上"有目录但不在注册表里"的项目补登记。
    * 这样即使用户直接往 `.paperflow/projects/` 里拷了一个项目，也能在界面上看到。
    */
+  /** 某人是否能看见这个项目：创建者、或已被加入。 */
+  canAccess(meta: ProjectMeta, userId: string | undefined): boolean {
+    if (!userId) return false;
+    if (meta.ownerId === userId) return true;
+    if (meta.members?.includes(userId)) return true;
+    // 老项目没有归属信息：只有发起方可见，避免成员看到别人的全部项目
+    return meta.ownerId === undefined ? false : false;
+  }
+
+  /** 把某个用户加进项目的成员列表。 */
+  addMember(id: string, userId: string): void {
+    const list = this.readAll();
+    const meta = list.find((p) => p.id === id);
+    if (!meta) return;
+    meta.members = [...new Set([...(meta.members ?? []), userId])];
+    meta.collab = true;
+    meta.updatedAt = new Date().toISOString();
+    this.writeAll(list);
+  }
+
+  /** 记录创建者。 */
+  setOwner(id: string, ownerId: string): void {
+    const list = this.readAll();
+    const meta = list.find((p) => p.id === id);
+    if (!meta) return;
+    meta.ownerId = ownerId;
+    this.writeAll(list);
+  }
+
   /** 把项目标记为协作（邀请被批准时调用）。 */
   setCollab(id: string, collab = true): void {
     const list = this.readAll();

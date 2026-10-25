@@ -1,18 +1,20 @@
 /** 左侧活动栏：切换 文件 / 大纲 / 共享知识 / 模型设置 四个面板。 */
 
-import { BookOpen, Files, ListTree, MessageSquareText, Settings2 } from 'lucide-react';
+import { BookOpen, Files, ListTree, MessageSquareText, Settings2, NotebookPen} from 'lucide-react';
 import type { LeftRailView } from '@/stores/workspaceStore';
 import { useWorkspaceStore } from '@/stores/workspaceStore';
 import { useAnnotationStore } from '@/stores/annotationStore';
 import { FileTree } from './FileTree';
 import { OutlinePanel } from './OutlinePanel';
 import { AnnotationPanel } from './AnnotationPanel';
+import { NotePanel } from './NotePanel';
 import { ContextPanel } from './ContextPanel';
 import { ModelSettingsPanel } from './ModelSettingsPanel';
 
 const VIEWS: { id: LeftRailView; icon: typeof Files; label: string }[] = [
   { id: 'files', icon: Files, label: '项目文件' },
   { id: 'outline', icon: ListTree, label: '章节大纲' },
+  { id: 'notes', label: '笔记', icon: NotebookPen },
   { id: 'annotations', icon: MessageSquareText, label: '批注（点击可跳转）' },
   { id: 'context', icon: BookOpen, label: '共享知识（文献/术语/图表）' },
   { id: 'models', icon: Settings2, label: '模型与后端设置' },
@@ -56,6 +58,7 @@ export function LeftRail() {
         {view === 'files' && <FileTree />}
         {view === 'outline' && <OutlinePanel />}
         {view === 'annotations' && <AnnotationPanel />}
+        {view === 'notes' && <NotePanel />}
         {view === 'context' && <ContextPanel />}
         {view === 'models' && <ModelSettingsPanel />}
       </div>

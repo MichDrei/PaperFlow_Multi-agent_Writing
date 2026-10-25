@@ -149,9 +149,15 @@ test('历史消息带发言人标签，且 system 里解释了该格式', async 
   }
 
   const request = provider.requests[0]!;
-  const assistantTurn = request.messages.find((m) => m.role === 'assistant');
-  assert.ok(assistantTurn, '历史里的模型发言应作为 assistant 轮次回放');
-  assert.match(assistantTurn!.content, /^\[deepseek-reasoner\]/, '应带发言人标签');
+  /*
+   * 别的模型说过的话**不能**作为 assistant 轮次回放：
+   * 否则模型会把它当成"自己说的"（实测 MiMo 因此自称 deepseek-flash）。
+   * 现在标记为 user 角色并带发言人，模型才知道这是别人。
+   */
+  const peerTurn = request.messages.find((m) => m.content.includes('我是 DeepSeek 的推理模型'));
+  assert.ok(peerTurn, '历史里的模型发言应进入上下文');
+  assert.equal(peerTurn!.role, 'user', '别的模型的发言应是 user 角色');
+  assert.match(peerTurn!.content, /【deepseek-reasoner 的发言】/, '应带发言人标签');
 });
 
 test('参考资料正文必须进入提示词（不能只给标题，否则模型只会反问"哪一篇"）', async () => {

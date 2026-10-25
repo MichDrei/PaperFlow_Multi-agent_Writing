@@ -60,8 +60,34 @@ export class ChatService {
       selection: req.selection,
     };
 
-    // 传给编排器的历史 = 本回合之前的所有消息（不含刚插入的这条）。
-    const history = [...session.messages];
+    /*
+     * 传给编排器的历史 = 本回合之前的所有消息（不含刚插入的这条）。
+     *
+     * 私聊不落服务器，所以历史由前端带过来（`req.history`）；
+     * 不这样做的后果实测是：模型看不到别的 agent 的回答，引用也失效。
+     */
+    const history: ChatMessage[] =
+      req.channel === 'private' && req.history?.length
+        ? req.history.map((item, index) =>
+            item.authorKind === 'model'
+              ? ({
+                  id: `hist-${index}`,
+                  threadId: req.threadId,
+                  author: { kind: 'model', modelId: item.name ?? 'model', role: 'author' as const },
+                  text: item.text,
+                  createdAt: new Date(0).toISOString(),
+                  status: 'done' as const,
+                } satisfies ChatMessage)
+              : ({
+                  id: `hist-${index}`,
+                  threadId: req.threadId,
+                  author: { kind: 'user', name: item.name },
+                  text: item.text,
+                  createdAt: new Date(0).toISOString(),
+                  status: 'done' as const,
+                } satisfies ChatMessage),
+          )
+        : [...session.messages];
 
     // 用户引用的那条回答：从会话历史里取出原文，连同发言人一起交给模型。
     // 这样"@qwen 评价 ds 上一条回答"就不需要用户复制粘贴。

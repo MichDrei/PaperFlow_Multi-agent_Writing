@@ -35,6 +35,8 @@ export interface ChatMessage {
   status: MessageStatus;
   /** 消息属于哪个通道：缺省视为公聊（房间）。 */
   channel?: 'room' | 'private';
+  /** 私聊时属于哪个会话（用于多个私聊对话之间隔离上下文）。 */
+  privateThread?: string;
   mentions?: Mention[];
   /** 该条消息针对的编辑器选区（发出去时快照，避免随后选区变化导致语义漂移）。 */
   selection?: Selection;

@@ -40,7 +40,16 @@ export function registerProjectRoutes(app: FastifyInstance, options: ProjectRout
   const projectIdOf = (params: { projectId: string }): string => params.projectId;
 
   // ── 项目列表 / 新建 / 重命名 / 删除 ───────────────────────────
-  app.get('/api/projects', async () => ({ projects: registry.reconcile() }));
+  app.get('/api/projects', async (request) => {
+    /*
+     * 只返回"这个人能看见的项目"：
+     * 之前无条件返回全部，导致成员登录后能看到发起人的所有论文（严重越权）。
+     */
+    const me = (request as { currentUser?: { id: string } }).currentUser;
+    const all = registry.reconcile();
+    if (!me) return { projects: all };
+    return { projects: all.filter((p) => registry.canAccess(p, me.id)) };
+  });
 
   /**
    * 从 zip 新建项目（原子）：`POST /api/projects/import?name=ICRA`，body 为原始 zip 字节。
@@ -109,6 +118,24 @@ export function registerProjectRoutes(app: FastifyInstance, options: ProjectRout
       return reply.code(400).send({ code: 'bad_request', message: '请提供项目名' });
     }
     const meta = registry.create(parsed.data.name);
+    /*
+     * 新项目必须至少有一个文件。
+     * 空项目会让前端「没有激活文件」的状态反复触发更新，
+     * 实测切到空项目直接报 Maximum update depth exceeded（React 死循环保护）。
+     */
+    if (!parsed.data.zipBase64) {
+      store.ensure(meta.id, {
+        'main.tex':
+            '\\documentclass[11pt]{article}\n\\usepackage{amsmath,amssymb}\n\\usepackage{graphicx}\n\n' +
+            '\\title{未命名论文}\n\\author{}\n\\date{\\today}\n\n\\begin{document}\n\\maketitle\n\n' +
+            '\\begin{abstract}\n在这里写摘要。\n\\end{abstract}\n\n\\section{Introduction}\n开始写作…\n\n' +
+          '\\end{document}\n',
+      });
+      store.setRootPath(meta.id, 'main.tex');
+    }
+    // 记录创建者：项目列表按人过滤时靠它判断归属
+    const creator = (request as { currentUser?: { id: string } }).currentUser;
+    if (creator) registry.setOwner(meta.id, creator.id);
 
     // 直接在新建时导入 zip：这就是"上传一个 IROS 的压缩包，项目管理里就多一个项目"
     if (parsed.data.zipBase64) {

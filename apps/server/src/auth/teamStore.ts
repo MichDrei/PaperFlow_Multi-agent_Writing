@@ -267,6 +267,13 @@ export class TeamStore {
     if (!usable.ok) return { kind: 'error', message: usable.reason ?? '邀请不可用' };
 
     const displayName = input.displayName.trim().slice(0, 40) || '匿名';
+    /*
+     * 重名直接拒绝：邀请链接被重复打开会创建多个同名用户
+     * （实测出现过三个"李四"，成员列表、@ 候选、项目归属全乱）。
+     */
+    if (this.data.users.some((u) => u.displayName === displayName)) {
+      return { kind: 'error', message: '这个名字已被占用，请换一个名字（或让发起方确认账号）' };
+    }
     invite.used += 1;
 
     if (invite.autoApprove) {
@@ -301,6 +308,9 @@ export class TeamStore {
   }
 
   /** 审批。通过时创建用户并签发会话返回给调用方（前端轮询用）。 */
+  /** 最近一次批准创建出来的用户 id（route 用它把成员加进项目，避免按显示名找错人）。 */
+  lastApprovedUserId: string | undefined;
+
   decideRequest(id: string, approve: boolean, decidedBy: string, role?: MemberRole): JoinRequest | undefined {
     const request = this.findRequest(id);
     if (!request || request.status !== 'pending') return undefined;
@@ -311,6 +321,8 @@ export class TeamStore {
       const user = this.createUser(request.displayName, role === 'owner');
       // 记下"他加入了哪个项目"，成员列表据此按项目过滤
       if (request.projectId) user.joinedProjects = [request.projectId];
+      // 记录这次真正创建的用户，route 用它加项目成员（显示名重复时不会认错）
+      this.lastApprovedUserId = user.id;
       request.userId = user.id;
       request.role = role ?? request.role;
       // 通过后立刻签发会话：申请人的页面轮询到 approved 时可直接拿到 token
@@ -337,6 +349,20 @@ export class TeamStore {
     };
     this.data.users.push(user);
     return user;
+  }
+
+  /**
+   * 给**已有用户**签发一条新会话（找回账号用）。
+   *
+   * 场景：成员清了浏览器缓存 / 换了电脑，而邀请链接是"创建新用户"的，
+   * 重名又被拒——没有这个入口他就永远进不来了。
+   */
+  issueSession(userId: string): Session {
+    const user = this.data.users.find((u) => u.id === userId);
+    if (!user) throw new Error('用户不存在');
+    const session = this.createSession(userId);
+    this.save();
+    return session;
   }
 
   private createSession(userId: string): Session {

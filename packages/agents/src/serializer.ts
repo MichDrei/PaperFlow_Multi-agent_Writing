@@ -234,7 +234,19 @@ export function serializeMessages(input: SerializeInput): LlmMessage[] {
       const name = message.author.name;
       messages.push({ role: 'user', content: name ? `${name}：${message.text}` : message.text });
     } else if (message.author.kind === 'model') {
-      messages.push({ role: 'assistant', content: `[${message.author.modelId}] ${message.text}` });
+      /*
+       * 关键：只有**自己**说过的话才是 assistant。
+       *
+       * 之前所有模型消息都用 assistant，模型会把别的模型的发言当成人格分裂的"自己"——
+       * 实测小米 MiMo 看到历史里的 `[deepseek-flash] …` 就回答"我按群规以 deepseek-flash 身份"。
+       * 别人的话改成 user 角色并标注发言人，模型才会理解为"这是另一个模型说的"。
+       */
+      const selfId = input.selfModel?.id;
+      if (!selfId || message.author.modelId === selfId) {
+        messages.push({ role: 'assistant', content: message.text });
+      } else {
+        messages.push({ role: 'user', content: `【${message.author.modelId} 的发言】${message.text}` });
+      }
     }
   }
 

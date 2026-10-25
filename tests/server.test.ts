@@ -41,6 +41,12 @@ async function startServer(
   // persistPath: null + 临时 projectsRoot —— 隔离掉本机真实数据，
   // 否则测试会读写用户的 .paperflow（项目文件、共享知识），用例互相污染。
   const projectsRoot = mkdtempSync(join(process.cwd(), '.cache', 'server-projects-'));
+  /*
+   * 自定义厂商配置存在数据目录里（<PROJECTS_ROOT>/providers.json）。
+   * 这里指向临时目录，否则会读到开发机上的真实配置，
+   * "未配置任何厂商"这类断言就会失败。
+   */
+  process.env.PROJECTS_ROOT = projectsRoot;
   const built = await buildServer({
     env,
     envSource: {},

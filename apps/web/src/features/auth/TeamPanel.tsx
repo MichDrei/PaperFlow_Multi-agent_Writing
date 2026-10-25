@@ -184,6 +184,24 @@ export function TeamPanel({ open, onClose }: { open: boolean; onClose: () => voi
                 <span className="flex-1 truncate">{m.displayName}</span>
                 {m.isOwner && <span className="text-[10px] text-brand-400">发起方</span>}
                 {m.id === me?.id && <span className="text-[10px] text-ink-500">你</span>}
+                {me?.isOwner && (
+                  <button
+                    type="button"
+                    onClick={async () => {
+                      // 给已有账号签发一条新会话：成员清了缓存/换电脑时靠它回来
+                      const res = await fetch(apiUrl(`/api/team/members/${m.id}/recover`), { method: 'POST' });
+                      const data = (await res.json()) as { url?: string };
+                      if (!data.url) return;
+                      const full = `${window.location.origin}${data.url}`;
+                      void navigator.clipboard?.writeText(full);
+                      window.alert(`恢复链接已复制，发给「${m.displayName}」：\n\n${full}\n\n（30 天有效）`);
+                    }}
+                    className="rounded px-1 py-0.5 text-[10px] text-ink-500 hover:bg-brand-500/15 hover:text-brand-300"
+                    title="为他生成一条登录链接（清缓存/换电脑时用）"
+                  >
+                    恢复链接
+                  </button>
+                )}
               </li>
             ))}
           </ul>

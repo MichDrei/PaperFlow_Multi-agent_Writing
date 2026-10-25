@@ -35,6 +35,13 @@ export interface ChatTurnRequest {
    * - `private`：私聊，**不广播、不落公共历史**，别人看不到
    */
   channel?: 'room' | 'private';
+  /**
+   * 私聊通道的历史（由前端提供）。
+   *
+   * 私聊消息不落服务器（用户要求历史只存本地），但模型必须看到之前说过什么——
+   * 否则会出现"另一个 agent 的回答它完全不认"和"引用失效"。
+   */
+  history?: { authorKind: 'user' | 'model'; name?: string; text: string }[];
   /** 当前文档快照（服务端据此计算 diff，避免二次往返）。 */
   document?: {
     fileId: string;

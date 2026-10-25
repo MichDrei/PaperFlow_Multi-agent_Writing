@@ -81,6 +81,11 @@ interface ChatState {
   setChannel: (channel: 'room' | 'private') => void;
   /** 私聊消息（只存在本机，不落服务器）。 */
   privateMessages: ChatMessage[];
+  /** 私聊会话列表（像 ChatGPT 的多条对话，避免上下文互相污染）。 */
+  privateThreads: { id: string; title: string; createdAt: string }[];
+  activePrivateThread: string;
+  newPrivateThread: () => void;
+  selectPrivateThread: (id: string) => void;
   clearUnread: () => void;
   /** 连接群聊房间：接收其他成员与 agent 的广播。 */
   connectRoom: () => void;
@@ -116,6 +121,7 @@ export function reduceEvent(state: ChatState, event: StreamEvent): Partial<ChatS
         threadId: state.thread.id,
         author: { kind: 'model', modelId: event.modelId, role: event.role },
         channel: activeChannel,
+        privateThread: activeChannel === 'private' ? activePrivateThread : undefined,
         text: '',
         createdAt: new Date().toISOString(),
         status: 'streaming',
@@ -141,8 +147,41 @@ export function reduceEvent(state: ChatState, event: StreamEvent): Partial<ChatS
       };
     }
 
-    case 'message.end':
-      return patchMessage(event.messageId, (m) => ({ ...m, status: 'done', usage: event.usage }));
+    case 'message.end': {
+      const patched = patchMessage(event.messageId, (m) => ({ ...m, status: 'done', usage: event.usage }));
+      /*
+       * 私聊的首轮回答结束后，用模型给会话起标题。
+       * 之前的"截取首句"会得到"我是谁"这种毫无信息量的名字。
+       */
+      if (activeChannel === 'private') {
+        const first = state.thread.messages.find(
+          (m) =>
+            (m.channel ?? 'room') === 'private' &&
+            (m.privateThread ?? 'p-default') === activePrivateThread &&
+            m.author.kind === 'user',
+        );
+        const answered = state.thread.messages.filter(
+          (m) => (m.channel ?? 'room') === 'private' && (m.privateThread ?? 'p-default') === activePrivateThread && m.author.kind === 'model',
+        ).length;
+        if (first && first.author.kind === 'user' && answered <= 1) {
+          const modelId = state.thread.messages.find(
+            (m) => (m.channel ?? 'room') === 'private' && (m.privateThread ?? 'p-default') === activePrivateThread && m.author.kind === 'model',
+          );
+          const mid = modelId?.author.kind === 'model' ? modelId.author.modelId : undefined;
+          if (mid) {
+            void generateTitle(first.text, mid).then((title) => {
+              if (!title) return;
+              useChatStore.setState((current) => ({
+                privateThreads: current.privateThreads.map((t) =>
+                  t.id === activePrivateThread ? { ...t, title } : t,
+                ),
+              }));
+            });
+          }
+        }
+      }
+      return patched;
+    }
 
     case 'message.error':
       return patchMessage(event.messageId, (m) => ({ ...m, status: 'error', error: event.message }));
@@ -178,9 +217,34 @@ const CLIENT_ID = Math.random().toString(36).slice(2, 10);
  * 所以用这个模块级变量把"这条消息属于哪个通道"带进去。
  */
 let activeChannel: 'room' | 'private' = 'room';
+/** 当前私聊会话 id：给新消息打标，用于多私聊对话隔离。 */
+let activePrivateThread = 'p-default';
 
 /** 私聊消息的本地存储键：私聊历史只存在这台机器上，不落服务器。 */
 const PRIVATE_STORE_KEY = 'pf.privateMessages.v1';
+/** 私聊会话列表（含当前会话）：刷新后仍保留多条对话。 */
+const PRIVATE_THREADS_KEY = 'pf.privateThreads.v1';
+
+interface PrivateThreadMeta {
+  id: string;
+  title: string;
+  createdAt: string;
+}
+
+function loadPrivateThreads(): { threads: PrivateThreadMeta[]; active: string } {
+  try {
+    const raw = localStorage.getItem(PRIVATE_THREADS_KEY);
+    if (raw) {
+      const parsed = JSON.parse(raw) as { threads?: PrivateThreadMeta[]; active?: string };
+      if (parsed.threads?.length) {
+        return { threads: parsed.threads, active: parsed.active ?? parsed.threads[0]!.id };
+      }
+    }
+  } catch {
+    /* 解析失败就当没有 */
+  }
+  return { threads: [{ id: 'p-default', title: '默认对话', createdAt: new Date().toISOString() }], active: 'p-default' };
+}
 
 /** 读取本地保存的私聊消息（解析失败就当没有）。 */
 function loadPrivateMessages(): ChatMessage[] {
@@ -191,6 +255,58 @@ function loadPrivateMessages(): ChatMessage[] {
     return Array.isArray(parsed) ? parsed.filter((m) => m.channel === 'private') : [];
   } catch {
     return [];
+  }
+}
+
+/**
+ * 让模型给私聊会话起个短标题。
+ *
+ * 关键：用 `channel: 'private'` + 空 history + 独立线程 id——
+ * 这样不广播、不写服务器历史、也不进入任何会话的上下文，
+ * 纯粹借一次模型调用来"概括主题"。
+ */
+async function generateTitle(text: string, modelId: string): Promise<string | null> {
+  try {
+    const res = await fetch(apiUrl('/api/chat'), {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        threadId: `title-${Date.now().toString(36)}`,
+        prompt: `用不超过 10 个字概括下面这段对话的主题，只输出标题本身，不要引号、不要解释：\n\n${text.slice(0, 400)}`,
+        participants: [modelId],
+        clientId: `title-${Date.now().toString(36)}`,
+        clientMessageId: `t-${Date.now().toString(36)}`,
+        channel: 'private',
+        history: [],
+      }),
+    });
+    const dec = new TextDecoder();
+    let buf = '';
+    let out = '';
+    if (!res.body) return null;
+    const reader = res.body.getReader();
+    while (true) {
+      const { done, value } = await reader.read();
+      if (done) break;
+      const chunk = value;
+      buf += dec.decode(chunk, { stream: true });
+      let idx;
+      while ((idx = buf.indexOf('\n')) >= 0) {
+        const line = buf.slice(0, idx).trim();
+        buf = buf.slice(idx + 1);
+        if (!line.startsWith('data:')) continue;
+        try {
+          const event = JSON.parse(line.slice(5)) as { type: string; text?: string };
+          if (event.type === 'message.delta' && event.text) out += event.text;
+        } catch {
+          /* 忽略半包 */
+        }
+      }
+    }
+    const clean = out.replace(/["“”'\n]/g, ' ').replace(/\s+/g, ' ').trim();
+    return clean.slice(0, 16) || null;
+  } catch {
+    return null;
   }
 }
 
@@ -209,7 +325,23 @@ export const useChatStore = create<ChatState>()((set, get) => {
     unreadMentions: 0,
     channel: 'room',
     privateMessages: [],
-    setChannel: (channel) => set({ channel }),
+    privateThreads: loadPrivateThreads().threads,
+    activePrivateThread: loadPrivateThreads().active,
+    newPrivateThread: () =>
+      set((state) => {
+        const id = `p-${Date.now().toString(36)}`;
+        const createdAt = new Date().toISOString();
+        return {
+          privateThreads: [{ id, title: `对话 ${state.privateThreads.length + 1}`, createdAt }, ...state.privateThreads],
+          activePrivateThread: id,
+        };
+      }),
+    selectPrivateThread: (id) => set({ activePrivateThread: id }),
+    setChannel: (channel) => {
+      set({ channel });
+      // 换通道后模型列表不一样（私聊多出"我的模型"），要重新拉一次
+      void get().probeBackend();
+    },
     proposals: {},
     activeTurnIds: [],
     roomTouched: false,
@@ -229,7 +361,8 @@ export const useChatStore = create<ChatState>()((set, get) => {
     probeBackend: async () => {
       if (get().transport.kind !== 'http') return;
       try {
-        const res = await fetch(`${API_BASE}/api/models`);
+        // 按通道拉模型：公聊只列公用，私聊列公用 + 我的
+        const res = await fetch(`${API_BASE}/api/models?channel=${get().channel}`);
         if (!res.ok) throw new Error(`HTTP ${res.status}`);
         const payload = (await res.json()) as {
           models: ModelDescriptor[];
@@ -297,6 +430,12 @@ export const useChatStore = create<ChatState>()((set, get) => {
           | { type: 'chat.agent'; event: StreamEvent };
         if (payload.type === 'chat.agent') {
           const event = payload.event;
+          /*
+           * 通道必须来自**广播本身**。
+           * 之前用的是本机当前通道：赵六在公聊唤起的回答，会被正在看私聊的人
+           * 打上 private 标签（跑到私聊里），而公聊里看不到这条回答。
+           */
+          activeChannel = (payload as { channel?: 'room' | 'private' }).channel ?? 'room';
           const patch = reduceEvent(get(), event);
           set(patch as ChatState);
           // "xx 正在回答…"：开始回答时登记，结束时清除
@@ -348,6 +487,31 @@ export const useChatStore = create<ChatState>()((set, get) => {
       if (!trimmed) return;
       // 记录本次发送的通道：私聊不广播、不落公共历史
       activeChannel = get().channel;
+      activePrivateThread = get().activePrivateThread;
+      /*
+       * 首条消息自动命名会话：默认的"对话 2"毫无信息量，
+       * 用这句话的前 18 个字当标题，历史列表才看得懂。
+       */
+      if (activeChannel === 'private') {
+        const hasAny = get().thread.messages.some(
+          (m) => (m.channel ?? 'room') === 'private' && (m.privateThread ?? 'p-default') === activePrivateThread,
+        );
+        if (!hasAny) {
+          const placeholder =
+            trimmed
+              .replace(/\s+/g, ' ')
+              // 去掉"帮我/请/能不能"这类口头禅，剩下的更像标题
+              .replace(/^(帮我|帮忙|请|麻烦|能不能|可以|我想|我要)+/g, '')
+              .replace(/[，。！？,.!?]/g, ' ')
+              .trim()
+              .slice(0, 16) || '新对话';
+          set((state) => ({
+            privateThreads: state.privateThreads.map((t) =>
+              t.id === activePrivateThread && /^(对话 \d+|默认对话)$/.test(t.title) ? { ...t, title: placeholder } : t,
+            ),
+          }));
+        }
+      }
 
       /*
        * 「@ 人」和「@ 模型」要分开。
@@ -439,6 +603,21 @@ export const useChatStore = create<ChatState>()((set, get) => {
         clientMessageId: userMessage.id,
         clientId: CLIENT_ID,
         channel: activeChannel,
+        /*
+         * 私聊的消息不落服务器，所以历史要前端自己带过去，
+         * 否则模型看不到之前（尤其是别的 agent）说了什么，引用也会失效。
+         */
+        history:
+          activeChannel === 'private'
+            ? get()
+                .thread.messages.filter((m) => (m.channel ?? 'room') === 'private' && m.text.trim())
+                .slice(-40)
+                .map((m) =>
+                  m.author.kind === 'model'
+                    ? { authorKind: 'model' as const, name: m.author.modelId, text: m.text }
+                    : { authorKind: 'user' as const, name: m.author.kind === 'user' ? m.author.name : undefined, text: m.text },
+                )
+            : undefined,
         document: { fileId: activeFile.id, content: activeFile.content, version: activeFile.version },
         mainFile: {
           fileId: mainFile.id,
@@ -450,9 +629,36 @@ export const useChatStore = create<ChatState>()((set, get) => {
 
       if (quoted) useComposerStore.getState().clearQuote();
 
+      const wasPrivate = activeChannel === 'private';
+      const threadKey = activePrivateThread;
+
       await get().transport.send(request, (event) => {
         set((state) => reduceEvent(state, event));
       });
+
+      /*
+       * 私聊第一轮结束后，用模型起标题（放这里而不是 reducer：
+       * reducer 必须是纯函数，之前放里面没有生效）。
+       */
+      if (wasPrivate) {
+        const msgs = get().thread.messages.filter(
+          (m) => (m.channel ?? 'room') === 'private' && (m.privateThread ?? 'p-default') === threadKey,
+        );
+        const firstUser = msgs.find((m) => m.author.kind === 'user');
+        const firstModel = msgs.find((m) => m.author.kind === 'model');
+        const alreadyNamed = get().privateThreads.find((t) => t.id === threadKey)?.title;
+        const autoNamed = !alreadyNamed || /^(对话 \d+|默认对话|.*\u2026?)$/.test(alreadyNamed) || alreadyNamed.length >= 14;
+        if (firstUser?.author.kind === 'user' && firstModel?.author.kind === 'model' && autoNamed) {
+          const title = await generateTitle(firstUser.text, firstModel.author.modelId);
+          if (title) {
+            set((state) => ({
+              privateThreads: state.privateThreads.map((t) =>
+                t.id === threadKey ? { ...t, title } : t,
+              ),
+            }));
+          }
+        }
+      }
     },
 
     cancel: () => {
@@ -560,6 +766,10 @@ useChatStore.subscribe((state) => {
   try {
     const priv = state.thread.messages.filter((m) => m.channel === 'private').slice(-200);
     localStorage.setItem(PRIVATE_STORE_KEY, JSON.stringify(priv));
+    localStorage.setItem(
+      PRIVATE_THREADS_KEY,
+      JSON.stringify({ threads: state.privateThreads, active: state.activePrivateThread }),
+    );
   } catch {
     /* 存储满了/被禁用就跳过，不影响聊天 */
   }

@@ -17,14 +17,16 @@ import {
 } from '@paperflow/core';
 import { Avatar, Button, IconButton } from '@paperflow/ui';
 import { useChatStore } from '@/stores/chatStore';
+import { useWorkspaceStore } from '@/stores/workspaceStore';
 import { selectUsableModels } from '@/lib/modelSelection';
 import { useComposerStore } from '@/stores/composerStore';
 import { apiUrl } from '@/lib/backend';
-import { useWorkspaceStore } from '@/stores/workspaceStore';
 import { INTENT_ACTIONS } from '@/lib/intent';
 
 export function Composer() {
   const draft = useComposerStore((s) => s.draft);
+  // @ 候选只列本项目的成员（单人项目里就只有自己）
+  const activeProjectId = useWorkspaceStore((s) => s.activeProjectId);
   const setDraft = useComposerStore((s) => s.setDraft);
   const focusToken = useComposerStore((s) => s.focusToken);
 
@@ -58,10 +60,17 @@ export function Composer() {
   }, [mention, members]);
 
   const candidates = useMemo<ModelDescriptor[]>(() => {
-    const inRoom = usable.filter((m) => participants.includes(m.id));
-    const others = usable.filter((m) => !participants.includes(m.id));
-    const list = [...inRoom, ...others];
-    return mention ? filterCatalog(list, mention.query) : list;
+    /*
+     * 只列**阵容里**的模型。
+     *
+     * 之前把"可用的全部模型"都列出来，导致把 kimi/qwen 从阵容移出后，
+     * @ 菜单里仍然能点到它们——阵容就形同虚设了。
+     * 阵容 = 这个房间在场的 AI；不在阵容里就不该被 @。
+     */
+    const list = usable.filter((m) => participants.includes(m.id));
+    // 兜底：阵容为空（或还没加载）时列出全部可用模型，避免 @ 菜单完全空掉
+    const pool = list.length > 0 ? list : usable;
+    return mention ? filterCatalog(pool, mention.query) : pool;
   }, [usable, participants, mention]);
 
   useEffect(() => {
@@ -75,7 +84,7 @@ export function Composer() {
   useEffect(() => {
     if (!mention || membersLoaded) return;
     setMembersLoaded(true);
-    void fetch(apiUrl('/api/team/roster'))
+    void fetch(apiUrl(`/api/team/roster${activeProjectId ? `?project=${encodeURIComponent(activeProjectId)}` : ''}`))
       .then((r) => r.json())
       .then((d: { members?: { id: string; displayName: string; color: string }[] }) => setMembers(d.members ?? []))
       .catch(() => setMembers([]));
@@ -329,13 +338,12 @@ export function Composer() {
               <Button
                 size="xs"
                 variant="primary"
-                icon={<Send className="size-3" />}
+                /* 去掉图标 + min-w-max：中文按字断行，只有强制最小宽度才保证单行 */
+                className="min-w-max shrink-0 whitespace-nowrap"
                 onClick={doSend}
                 disabled={!draft.trim()}
               >
-                <span className="whitespace-nowrap">
-                  发送
-                </span>
+                发送
               </Button>
             )}
           </div>

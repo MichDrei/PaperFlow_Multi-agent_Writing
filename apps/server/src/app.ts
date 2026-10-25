@@ -21,6 +21,12 @@ import { registerProjectRoutes } from './http/routes/project.js';
 import { DEMO_DOCUMENT } from '@paperflow/context';
 import { ChatService } from './services/chatService.js';
 import { CompileService } from './services/compileService.js';
+import {
+  registerCustomProviderRoutes,
+  registerKeyRoutes,
+  registerMyProviderRoutes,
+  loadCustomProviders,
+} from './http/routes/keys.js';
 import { registerChatRoutes } from './http/routes/chat.js';
 import { registerCompileRoutes } from './http/routes/compile.js';
 import { TeamStore, defaultTeamFile } from './auth/teamStore.js';
@@ -77,6 +83,8 @@ export interface BuildServerOptions {
 
 export async function buildServer(options: BuildServerOptions): Promise<BuiltServer> {
   const { env } = options;
+  // 先加载界面里添加的自定义厂商，注册表构建时才能带上它们
+  loadCustomProviders();
   const gateway = createGateway(options.envSource ?? process.env);
   const sessions = new MemorySessionStore(
     options.persistPath === undefined
@@ -207,10 +215,14 @@ export async function buildServer(options: BuildServerOptions): Promise<BuiltSer
     });
   }
 
+  registerKeyRoutes(app, { authMode });
+  registerCustomProviderRoutes(app, { authMode });
+  registerMyProviderRoutes(app, { authMode });
   registerAuthRoutes(app, {
     team,
     authMode,
     markCollab: (projectId) => registry.setCollab(projectId, true),
+    onMemberJoined: (projectId, userId) => registry.addMember(projectId, userId),
   });
 
   /*

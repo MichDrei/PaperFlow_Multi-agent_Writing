@@ -146,8 +146,8 @@ export function TopBar() {
            * 固定宽度：中文是按字断行的，`whitespace-nowrap` 挡不住，
            * 窄到一定程度"编译"就会拆成上下两行（用户看到的就是三角图标和文字换行）。
            */
-          className="w-[76px] shrink-0"
-          icon={compiling ? <Square className="size-3" /> : <Play className="size-3" />}
+          /* 去掉图标：图标 + 中文在窄屏一定会折行，纯文字最稳 */
+          className="min-w-max shrink-0 whitespace-nowrap px-3"
           onClick={() => void compile()}
           disabled={compiling}
         >

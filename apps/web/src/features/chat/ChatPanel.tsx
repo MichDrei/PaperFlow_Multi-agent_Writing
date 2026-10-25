@@ -31,6 +31,10 @@ export function ChatPanel() {
   const [filter, setFilter] = useState<'all' | 'mention' | 'human' | 'agent'>('all');
   const [search, setSearch] = useState('');
   const channel = useChatStore((s) => s.channel);
+  const activePrivateThread = useChatStore((s) => s.activePrivateThread);
+  const privateThreads = useChatStore((s) => s.privateThreads);
+  const newPrivateThread = useChatStore((s) => s.newPrivateThread);
+  const selectPrivateThread = useChatStore((s) => s.selectPrivateThread);
   const setChannel = useChatStore((s) => s.setChannel);
   /** 项目是否已进入协作（有人被批准加入后为 true）。 */
   const collabProject = useWorkspaceStore((s) => {
@@ -41,6 +45,11 @@ export function ChatPanel() {
   useEffect(() => {
     if (!collabProject && channel === 'room') setChannel('private');
   }, [collabProject, channel, setChannel]);
+
+  // 私聊没有"@我 / 只看成员"，切过去时回落到"全部"，避免列表空白
+  useEffect(() => {
+    if (channel === 'private' && (filter === 'mention' || filter === 'human')) setFilter('all');
+  }, [channel, filter]);
   const unreadMentions = useChatStore((s) => s.unreadMentions);
   const clearUnread = useChatStore((s) => s.clearUnread);
   const remoteTyping = useChatStore((s) => s.remoteTyping);
@@ -76,6 +85,8 @@ export function ChatPanel() {
   const visible = messages.filter((message) => {
     // 通道过滤：私聊只在"私聊"里显示，公聊只在"公聊"里显示
     if ((message.channel ?? 'room') !== channel) return false;
+    // 私聊再按会话隔离：不同对话的上下文互不干扰
+    if (channel === 'private' && (message.privateThread ?? 'p-default') !== activePrivateThread) return false;
     // 关键词搜索（不区分大小写，匹配正文与发言人）
     const q = search.trim().toLowerCase();
     if (q) {
@@ -176,15 +187,49 @@ export function ChatPanel() {
           私聊
         </button>
         <span className="mx-1 h-3 w-px bg-ink-750" />
+
+        {channel === 'private' && (
+          <>
+            <button
+              type="button"
+              onClick={newPrivateThread}
+              title="开一条新的私聊对话（上下文不串）"
+              className="ml-auto rounded px-1.5 py-0.5 text-[10px] text-ink-400 hover:bg-ink-800 hover:text-brand-300"
+            >
+              ＋ 新对话
+            </button>
+            <select
+              value={activePrivateThread}
+              onChange={(e) => selectPrivateThread(e.target.value)}
+              className="max-w-[110px] rounded border border-ink-750 bg-ink-850 px-1 py-0.5 text-[10px] text-ink-300"
+              title="切换历史对话"
+            >
+              {privateThreads.map((t) => (
+                <option key={t.id} value={t.id}>
+                  {t.title}
+                </option>
+              ))}
+            </select>
+          </>
+        )}
       </div>
       <div className="flex items-center gap-1 border-b border-ink-850 px-2 py-1">
         {(
-          [
-            ['all', '全部'],
-            ['mention', '@我'],
-            ['human', '只看成员'],
-            ['agent', '只看 Agent'],
-          ] as const
+          channel === 'room'
+            ? ([
+                ['all', '全部'],
+                ['mention', '@我'],
+                ['human', '只看成员'],
+                ['agent', '只看 Agent'],
+              ] as const)
+            : /*
+               * 私聊里没有别人，也没有"被 @"这回事——
+               * 只保留"全部 / 只看 Agent"两个有意义的筛选项。
+               */
+              ([
+                ['all', '全部'],
+                ['agent', '只看 Agent'],
+              ] as const)
         ).map(([key, label]) => (
           <button
             key={key}

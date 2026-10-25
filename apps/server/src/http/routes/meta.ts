@@ -8,14 +8,32 @@ export function registerMetaRoutes(
   app: FastifyInstance,
   deps: { gateway: LlmGateway; sessions: SessionStore; compileEngine: string },
 ): void {
-  app.get('/api/models', async () => ({
-    // catalog() 会把厂商声明/环境变量覆盖的模型一并合并进来，
-    // 因此 `QWEN_MODELS=qwen3.8-max` 会立刻出现在前端阵容里。
-    models: deps.gateway.catalog(),
-    providers: deps.gateway.status(),
-    hasRealProvider: deps.gateway.hasRealProvider(),
-    compileEngine: deps.compileEngine,
-  }));
+  app.get<{ Querystring: { channel?: 'room' | 'private' } }>('/api/models', async (request) => {
+    const me = (request as { currentUser?: { id: string } }).currentUser;
+    const channel = request.query.channel ?? 'room';
+    /*
+     * 公私分离：私有厂商的 id 形如 `<provider>__<userId>`（见 keys.ts 的加载逻辑）。
+     * - 公聊：只列公用模型
+     * - 私聊：公用 + 自己的
+     * 这样别人的 Key 永远不会出现在你的 `@` 菜单里。
+     */
+    const isMine = (modelId: string) => {
+      const suffix = modelId.includes('__') ? modelId.split('__').pop() : undefined;
+      return Boolean(suffix && me?.id && suffix === me.id);
+    };
+    const isPrivateProvider = (modelId: string) => modelId.includes('__');
+    const models = deps.gateway.catalog().filter((m) => {
+      if (!isPrivateProvider(m.id)) return true;
+      if (channel === 'room') return false;
+      return isMine(m.id);
+    });
+    return {
+      models,
+      providers: deps.gateway.status(),
+      hasRealProvider: deps.gateway.hasRealProvider(),
+      compileEngine: deps.compileEngine,
+    };
+  });
 
   /** 清空某个线程的服务端历史。前端点"清空会话"时必须调用，
    * 否则界面看着空了、模型却还记着旧上下文（会造成"它怎么还在说上一轮的事"）。 */

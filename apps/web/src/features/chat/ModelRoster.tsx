@@ -1,6 +1,7 @@
 /** 群聊阵容：显示 / 切换房间里的模型，并标注哪些模型尚未配置 Key（走 mock）。 */
 
-import { Plus, RefreshCw, Users, X } from 'lucide-react';
+import { Check, Plus, RefreshCw, Users, X } from 'lucide-react';
+import { useState } from 'react';
 import type { ModelDescriptor } from '@paperflow/core';
 import { Avatar, Dot } from '@paperflow/ui';
 import { useChatStore } from '@/stores/chatStore';
@@ -19,6 +20,8 @@ export function ModelRoster() {
   const inRoom = usable.filter((m) => participants.includes(m.id));
   const outRoom = usable.filter((m) => !participants.includes(m.id));
   const hiddenCount = catalog.length - usable.length;
+  /** 点"＋"才展开可选模型列表（之前把全部模型平铺成一排，自定义厂商一多就糊成一片）。 */
+  const [picking, setPicking] = useState(false);
 
   return (
     <div className="flex flex-col gap-1.5 border-b border-ink-800 bg-ink-900/70 px-2.5 py-2">
@@ -68,26 +71,51 @@ export function ModelRoster() {
             style={{ borderColor: `${model.accent}44`, background: `${model.accent}12` }}
           >
             <Avatar initials={model.initials} accent={model.accent} size={16} />
-            <span className="font-medium" style={{ color: model.accent }}>
-              {model.family}
+            <span className="max-w-[130px] truncate font-medium" style={{ color: model.accent }}>
+              {model.label}
             </span>
             {!model.available && <span className="text-[9px] text-ink-500">mock</span>}
             <X className="size-2.5 text-ink-500 opacity-0 transition-opacity group-hover:opacity-100" />
           </button>
         ))}
 
-        {outRoom.map((model) => (
+        <div className="relative">
           <button
-            key={model.id}
             type="button"
-            onClick={() => toggle(model.id)}
-            title={`把 ${model.label} 加入房间`}
-            className="flex items-center gap-1 rounded-full border border-dashed border-ink-700 px-1.5 py-[2px] text-[10.5px] text-ink-500 transition-colors hover:border-ink-500 hover:text-ink-300"
+            onClick={() => setPicking((v) => !v)}
+            title="添加模型到房间"
+            className="flex items-center gap-1 rounded-full border border-dashed border-ink-700 px-1.5 py-[2px] text-[10.5px] text-ink-500 transition-colors hover:border-brand-600/60 hover:text-brand-300"
           >
             <Plus className="size-2.5" />
-            {model.family}
+            添加
           </button>
-        ))}
+
+          {picking && (
+            <div className="absolute top-full left-0 z-20 mt-1 max-h-64 w-56 overflow-y-auto rounded-md border border-ink-700 bg-ink-900 p-1 shadow-xl">
+              {outRoom.length === 0 && (
+                <p className="px-1.5 py-1 text-[10.5px] text-ink-500">所有可用模型都已在房间里</p>
+              )}
+              {outRoom.map((model) => (
+                <button
+                  key={model.id}
+                  type="button"
+                  onClick={() => {
+                    toggle(model.id);
+                    setPicking(false);
+                  }}
+                  className="flex w-full items-center gap-1.5 rounded px-1.5 py-1 text-left hover:bg-ink-800"
+                >
+                  <Avatar initials={model.initials} accent={model.accent} size={16} />
+                  <span className="min-w-0 flex-1">
+                    <span className="block truncate text-[11px] text-ink-100">{model.label}</span>
+                    <span className="block truncate text-[9.5px] text-ink-500">{model.provider}</span>
+                  </span>
+                  <Check className="size-3 shrink-0 text-transparent" />
+                </button>
+              ))}
+            </div>
+          )}
+        </div>
       </div>
 
       {hiddenCount > 0 && (

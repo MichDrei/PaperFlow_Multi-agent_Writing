@@ -21,6 +21,7 @@ import { EditorHoverPreview } from './EditorHoverPreview';
 import { useCollabDocument } from '@/features/realtime/useCollabDocument';
 import { apiUrl } from '@/lib/backend';
 import { useAnnotationStore } from '@/stores/annotationStore';
+import { useNoteStore } from '@/stores/noteStore';
 import { useThemeStore } from '@/stores/themeStore';
 import { useSessionStore } from '@/stores/sessionStore';
 import { resolveLabels } from './latexHover';
@@ -89,6 +90,8 @@ function CollabOverlay(props: {
 export function LatexEditor() {
   /** 白天模式：Monaco 有自己的一套颜色，必须切主题而不是改 CSS。 */
   const lightMode = useThemeStore((s) => s.light);
+  /** 当前项目：批注的 @ 候选要按项目过滤。 */
+  const activeProjectId = useWorkspaceStore((s) => s.activeProjectId);
 
   const editorRef = useRef<Monaco.editor.IStandaloneCodeEditor | null>(null);
   const monacoRef = useRef<typeof Monaco | null>(null);
@@ -492,11 +495,21 @@ export function LatexEditor() {
     const meta = s.projects.find((p) => p.id === s.activeProjectId);
     return Boolean(meta?.collab);
   });
+  /*
+   * 协同通道**不再要求项目已进入协作**：
+   * 批注（笔记）也要用它存数据。单人项目里没有别人能进这个项目，
+   * 所以打开通道不会串到别人的光标。
+   */
   const collabOn =
     import.meta.env.VITE_COLLAB !== '0' &&
     sessionMode === 'team' &&
-    projectCollab &&
     /\.(tex|bib|cls|sty)$/.test(currentPath);
+
+  /**
+   * 是否显示"协作"相关 UI（在线成员、他人光标、"协作中"标识）。
+   * 单人项目只保留批注能力，不显示这些。
+   */
+  const presenceOn = collabOn && projectCollab;
   const collab = useCollabDocument(
     editorReady ? editorRef.current : null,
     editorReady ? monacoRef.current : null,
@@ -546,6 +559,8 @@ export function LatexEditor() {
   /** 批注草稿：浮层放在编辑器层，工具条卸载也不会丢。 */
   const [annotDraft, setAnnotDraft] = useState<{ top: number; left: number; body: string } | null>(null);
   const [annotRoster, setAnnotRoster] = useState<{ id: string; displayName: string; color: string }[]>([]);
+  /** 划词记笔记的浮层状态（与批注分开：笔记是私人的）。 */
+  const [noteDraft, setNoteDraft] = useState<{ top: number; left: number; body: string; quoted: string } | null>(null);
   useEffect(() => {
     const ed = editorRef.current;
     const m = monacoRef.current;
@@ -609,20 +624,97 @@ export function LatexEditor() {
         <SelectionToolbar
           position={bar}
           toolbarRef={barRef}
-          annotateEnabled={collabOn}
+          annotateEnabled={presenceOn}
+          noteEnabled
+          onStartNote={() => {
+            /*
+             * 划词记笔记：和批注同一个入口位置，但**存本机**、只有自己能看到。
+             * 所以它不受协作模式限制——单人项目里也能用。
+             */
+            const range = lastSelectionRef.current;
+            if (!range) return;
+            setNoteDraft({ top: (bar?.top ?? 0) + 34, left: bar?.left ?? 0, body: '', quoted: '' });
+          }}
           onStartAnnotate={() => {
             const range = lastSelectionRef.current;
             if (!range) return;
             setAnnotDraft({ top: (bar?.top ?? 0) + 34, left: bar?.left ?? 0, body: '' });
-            void fetch(apiUrl('/api/team/roster'))
+            // 只拉**本项目**的成员：单人项目里不该出现别的项目的协作者
+            void fetch(apiUrl(`/api/team/roster${activeProjectId ? `?project=${encodeURIComponent(activeProjectId)}` : ''}`))
               .then((r) => r.json())
-              .then((d: { members?: { id: string; displayName: string; color: string }[] }) => setAnnotRoster(d.members ?? []))
+              .then((d: { members?: { id: string; displayName: string; color: string }[] }) => {
+                const me = useSessionStore.getState().me;
+                // 只留其他人：@ 自己来批注没有意义（最终只剩自己时列表为空）
+                setAnnotRoster((d.members ?? []).filter((m) => m.id !== me?.id));
+              })
               .catch(() => setAnnotRoster([]));
           }}
         />
       )}
       {editorReady && editorRef.current && monacoRef.current && (
         <EditorHoverPreview editor={editorRef.current} monaco={monacoRef.current} />
+      )}
+      {noteDraft && (
+        <div
+          data-testid="note-composer"
+          className="pf-enter absolute z-40 w-[300px] rounded-lg border border-brand-600/40 bg-ink-900 p-2 shadow-2xl"
+          style={{ top: noteDraft.top, left: noteDraft.left }}
+        >
+          <div className="mb-1 flex items-center gap-1 text-[10px] text-ink-500">
+            <span className="text-brand-300">笔记</span>
+            <span>（只有你能看到）</span>
+          </div>
+          <textarea
+            autoFocus
+            value={noteDraft.body}
+            onChange={(e) => setNoteDraft({ ...noteDraft, body: e.target.value })}
+            onKeyDown={(e) => {
+              if (e.key === 'Escape') setNoteDraft(null);
+              if (e.key === 'Enter' && (e.metaKey || e.ctrlKey) && noteDraft.body.trim()) {
+                const sel = editorRef.current?.getSelection();
+                const model = editorRef.current?.getModel();
+                const quoted = sel && model ? model.getValueInRange(sel).slice(0, 120) : '';
+                useNoteStore.getState().add({
+                  projectId: useWorkspaceStore.getState().activeProjectId ?? '',
+                  fileId: currentPath,
+                  line: sel?.startLineNumber,
+                  quoted,
+                  body: noteDraft.body.trim(),
+                });
+                setNoteDraft(null);
+              }
+            }}
+            placeholder="写点什么…（⌘/Ctrl+Enter 保存）"
+            className="h-16 w-full resize-none rounded border border-ink-700 bg-ink-850 px-2 py-1.5 text-[11.5px] text-ink-100 placeholder:text-ink-600 focus:border-brand-600/60 focus:outline-none"
+          />
+          {noteDraft.quoted && <p className="mt-1 truncate text-[9.5px] text-ink-600">「{noteDraft.quoted}」</p>}
+          <div className="mt-1 flex items-center gap-1">
+            <button
+              type="button"
+              disabled={!noteDraft.body.trim()}
+              onClick={() => {
+                const editor = editorRef.current;
+                const sel = editor?.getSelection();
+                const model = editor?.getModel();
+                const quoted = sel && model ? model.getValueInRange(sel).slice(0, 120) : '';
+                useNoteStore.getState().add({
+                  projectId: useWorkspaceStore.getState().activeProjectId ?? '',
+                  fileId: currentPath,
+                  line: sel?.startLineNumber,
+                  quoted,
+                  body: noteDraft.body.trim(),
+                });
+                setNoteDraft(null);
+              }}
+              className="rounded bg-brand-600 px-1.5 py-0.5 text-[10px] text-white disabled:opacity-40"
+            >
+              保存笔记
+            </button>
+            <button type="button" onClick={() => setNoteDraft(null)} className="text-[10px] text-ink-500 hover:text-ink-200">
+              取消
+            </button>
+          </div>
+        </div>
       )}
       {annotDraft && (
         <div
@@ -687,10 +779,7 @@ export function LatexEditor() {
           </div>
         </div>
       )}
-      <CollabOverlay
-        status={collab.status}
-        peers={collab.peers}
-      />
+      {presenceOn && <CollabOverlay status={collab.status} peers={collab.peers} />}
     </div>
   );
 }
@@ -711,6 +800,8 @@ function SelectionToolbar({
   toolbarRef,
   onStartAnnotate,
   annotateEnabled,
+  onStartNote,
+  noteEnabled,
 }: {
   position: FloatingBar;
   /** 父组件用它测量实际宽度，把浮动栏钳制在面板内（避免溢出被裁）。 */
@@ -718,6 +809,9 @@ function SelectionToolbar({
   /** 开始写批注：浮层由父组件渲染，避免工具条卸载时丢失状态。 */
   onStartAnnotate?: () => void;
   annotateEnabled?: boolean;
+  /** 划词记笔记（私人，不受协作模式限制）。 */
+  onStartNote?: () => void;
+  noteEnabled?: boolean;
 }) {
   const send = useChatStore((s) => s.send);
   const selection = useWorkspaceStore((s) => s.selection);
@@ -764,6 +858,16 @@ function SelectionToolbar({
         </button>
       ))}
       <span className="mx-0.5 h-4 w-px bg-ink-700" />
+      {noteEnabled && (
+        <button
+          type="button"
+          onClick={() => onStartNote?.()}
+          className="rounded px-1.5 py-0.5 text-[10.5px] text-ink-300 hover:bg-ink-800 hover:text-ink-100"
+          title="把选中的内容记成笔记（只有自己能看到）"
+        >
+          笔记
+        </button>
+      )}
       {annotateEnabled && (
         <button
           type="button"

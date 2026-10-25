@@ -74,6 +74,8 @@ export interface AuthRouteOptions {
   team: TeamStore;
   /** 批准加入后把对应项目切成协作模式。 */
   markCollab?: (projectId: string) => void;
+  /** 批准加入后把这个人加进项目成员（项目列表 / @ 候选按它过滤）。 */
+  onMemberJoined?: (projectId: string, userId: string) => void;
   /** 'team' 时启用鉴权；'solo' 时全部放行（保持单机体验不变）。 */
   authMode: 'solo' | 'team';
 }
@@ -177,8 +179,10 @@ export function registerAuthRoutes(app: FastifyInstance, options: AuthRouteOptio
     if (authMode === 'team' && !me) {
       return reply.code(401).send({ code: 'unauthorized', message: '需要登录' });
     }
+    // 传 project 就只返回本项目成员（`@` 候选不该出现别的项目的人）
+    const projectId = (request.query as { project?: string }).project;
     return {
-      members: team.listUsers().map((u) => ({
+      members: team.listUsers(projectId || undefined).map((u) => ({
         id: u.id,
         displayName: u.displayName,
         color: u.color,
@@ -252,6 +256,22 @@ export function registerAuthRoutes(app: FastifyInstance, options: AuthRouteOptio
     return { requests: team.listRequests(filter) };
   });
 
+  /**
+   * 为某个成员生成"恢复登录"链接（仅发起方）。
+   *
+   * 给已有账号签发一条新会话，通过 `/api/auth/resume?token=` 点一下即可回到登录态；
+   * 不创建新用户，也不改动成员列表。
+   */
+  app.post<{ Params: { id: string } }>('/api/team/members/:id/recover', async (request, reply) => {
+    if (!requireOwner(request, reply, team, authMode)) return;
+    try {
+      const session = team.issueSession(request.params.id);
+      return { url: `/api/auth/resume?token=${session.token}`, expiresInDays: 30 };
+    } catch {
+      return reply.code(404).send({ code: 'not_found', message: '成员不存在' });
+    }
+  });
+
   app.post<{ Params: { id: string } }>('/api/team/requests/:id/decision', async (request, reply) => {
     if (!requireOwner(request, reply, team, authMode)) return;
     const parsed = decisionSchema.safeParse(request.body);
@@ -263,6 +283,9 @@ export function registerAuthRoutes(app: FastifyInstance, options: AuthRouteOptio
     // 只有真的有人被批准进来，项目才算进入协作模式
     if (updated?.status === 'approved' && updated.projectId) {
       options.markCollab?.(updated.projectId);
+      // 用"刚批准创建的用户 id"，不能用显示名反查：李四重名时会认错人
+      const joinedId = team.lastApprovedUserId;
+      if (joinedId) options.onMemberJoined?.(updated.projectId, joinedId);
     }
     if (!updated) {
       return reply.code(409).send({ code: 'already_decided', message: '该申请已处理过' });

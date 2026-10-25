@@ -14,6 +14,20 @@ export const chatTurnSchema = z.object({
   projectId: z.string().min(1).max(128).optional(),
   clientId: z.string().max(64).optional(),
   channel: z.enum(['room', 'private']).optional(),
+  /*
+   * 私聊的历史（前端带来）。
+   * 不写进 schema 会被 zod 直接剥掉——实测表现就是"模型看不到上一轮说什么"。
+   */
+  history: z
+    .array(
+      z.object({
+        authorKind: z.enum(['user', 'model']),
+        name: z.string().max(120).optional(),
+        text: z.string().max(200_000),
+      }),
+    )
+    .max(80)
+    .optional(),
   mainFile: z
     .object({
       fileId: z.string().min(1).max(500),

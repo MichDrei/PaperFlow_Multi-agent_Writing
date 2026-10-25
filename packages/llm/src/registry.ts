@@ -97,7 +97,17 @@ function modelsFromEnv(env: GatewayEnv, key: string, provider: string): { models
 }
 
 function synthesizeDescriptor(id: ModelId, provider: ProviderId): ModelDescriptor {
-  const presentation = PROVIDER_PRESENTATION[provider];
+  /*
+   * 自定义厂商 / 中转站的模型不在内置展示表里，必须兜底。
+   * 之前直接读 `presentation.family`，导致服务启动就崩：
+   * TypeError: Cannot read properties of undefined (reading 'family')
+   */
+  const presentation = PROVIDER_PRESENTATION[provider] ?? {
+    family: '自定义',
+    contextWindow: 32_000,
+    strengths: ['自定义 / 中转'],
+    accent: '#8b5cf6',
+  };
   const initials = id.replace(/[^a-zA-Z0-9]/g, '').slice(0, 2).toUpperCase() || 'AI';
   return {
     id,
@@ -114,6 +124,69 @@ function synthesizeDescriptor(id: ModelId, provider: ProviderId): ModelDescripto
   };
 }
 
+/** 明显不是对话模型的名称特征（语音、图片、检索、工具类）。 */
+const NON_CHAT_PATTERN =
+  /(tts|asr|whisper|speech|voice|music|audio|realtime|embed|rerank|moderation|dall|stable-diffusion|image|search|router|gen-preview|\bgen\b|ocr|avatar|video|\btts\b)/i;
+
+/**
+ * 判断一个模型名是否可能用于对话。
+ *
+ * 各家的 `/models` 会把语音、图片、检索类模型一起返回（实测阶跃 33 个里
+ * 只有 4~5 个是对话模型）。不过滤的话，用户 @ 到语音模型就会得到"空回复"。
+ * 这里用名称特征做通用筛选——不按厂商写死，新厂商也适用。
+ */
+export function isChatLikeModel(id: string): boolean {
+  if (NON_CHAT_PATTERN.test(id)) return false;
+  return true;
+}
+
+/** 解析界面里添加的自定义厂商（JSON 数组）。 */
+function parseCustomProviders(raw: string | undefined): LlmProvider[] {
+  if (!raw) return [];
+  try {
+    const list = JSON.parse(raw) as {
+      id: string;
+      label: string;
+      baseUrl: string;
+      apiKey: string;
+      models?: string[];
+      /** 私有厂商：属于哪个用户（公用为空）。 */
+      ownerId?: string;
+    }[];
+    return list
+      .filter((item) => Boolean(item?.id && item.baseUrl && item.apiKey && (item.models?.length ?? 0) > 0))
+      .map(
+        (item) =>
+          new OpenAiCompatibleProvider({
+            // 自定义厂商的 id 不在内置 ProviderId 联合类型里，这里断言成同一类型
+            id: item.id as ProviderId,
+            label: item.label || item.id,
+            baseUrl: item.baseUrl,
+            apiKey: item.apiKey,
+            /*
+             * 没有模型清单就不要瞎编一个 `[providerId]`：
+             * 之前这样兜底，目录里会多出一个叫 "stepfun" 的假模型，
+             * 用户 @ 它时厂商返回 404，界面上表现为"空回复"。
+             */
+            /*
+             * 只把"像对话模型"的放进来，避免 @ 菜单里混入语音/图片模型。
+             *
+             * 私有厂商的模型必须加 `__<ownerId>` 后缀：否则和公用模型同名
+             * （都叫 deepseek-chat）时会被 catalog() 按 id 去重丢掉。
+             * 真正请求厂商前会在 provider 里把后缀去掉。
+             */
+            models: (item.models ?? [])
+              .filter(isChatLikeModel)
+              .map((m) => (item.ownerId ? `${m}__${item.ownerId}` : m)),
+          }),
+      );
+  } catch (err) {
+    // 不要静默吞掉：之前私有模型一直不出现在目录里，就是因为这里 catch 后返回空
+    console.error('[registry] 解析自定义厂商失败:', err);
+    return [];
+  }
+}
+
 /** 依据环境变量装配全部提供方。 */
 export function buildProviders(env: GatewayEnv): LlmProvider[] {
   const catalogIds = DEFAULT_MODEL_CATALOG.map((m) => m.id);
@@ -127,7 +200,16 @@ export function buildProviders(env: GatewayEnv): LlmProvider[] {
   const openrouter = modelsFromEnv(env, 'OPENROUTER_MODELS', 'openrouter');
   const ollama = modelsFromEnv(env, 'OLLAMA_MODELS', 'ollama');
 
+  /*
+   * 自定义厂商 / 中转站。
+   *
+   * 官方 SDK 之外，很多人用的是"中转站"（一个 baseUrl + 任意模型名），
+   * 严格说不是官方 API。这里用一份 JSON 描述，界面里填完即可使用。
+   */
+  const custom = parseCustomProviders(process.env.PAPERFLOW_CUSTOM_PROVIDERS);
+
   return [
+    ...custom,
     new AnthropicProvider({
       apiKey: env.ANTHROPIC_API_KEY,
       baseUrl: env.ANTHROPIC_BASE_URL,

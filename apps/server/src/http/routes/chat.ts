@@ -98,6 +98,7 @@ export function registerChatRoutes(
       body.projectId ?? '',
       {
         type: 'chat.user',
+        channel: body.channel ?? 'room',
         clientMessageId: body.clientMessageId,
         messageId: body.clientMessageId,
         text: body.prompt,
@@ -118,7 +119,7 @@ export function registerChatRoutes(
         if (channel.closed) break;
         channel.send(event);
         // agent 的回复也进房间（同样排除发起者）
-        if (!isPrivate) roomHub?.broadcast(body.projectId ?? '', { type: 'chat.agent', event }, clientId);
+        if (!isPrivate) roomHub?.broadcast(body.projectId ?? '', { type: 'chat.agent', event, channel: body.channel ?? 'room' }, clientId);
       }
     } catch (err) {
       channel.send({

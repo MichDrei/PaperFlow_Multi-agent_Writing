@@ -41,3 +41,6 @@ services/latex-compiler/build/
 # 编译产物缓存
 .paperflow/pdf-cache/
 .release/
+apps/server/.providers.json
+medieval-village/
+rick-morty-house/
